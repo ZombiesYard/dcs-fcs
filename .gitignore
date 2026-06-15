@@ -1,0 +1,7 @@
+.git-local/
+build/
+build-win/
+*.log
+*.user
+*.suo
+*.vcxproj.user
