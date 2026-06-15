@@ -136,7 +136,7 @@ Keep pedals centered. The app tests `assist_sign=+1` and `assist_sign=-1`, then 
 - `filter_time`: yaw-rate low-pass filter time.
 - `stale_timeout`: disables assist if DCS-BIOS stops updating.
 
-Start with the defaults. Increase `kp` slowly, and keep `max_assist` conservative until the direction is verified.
+The shipped defaults are medium authority for the AH-64D fast export path. If the correction is still too weak, raise `kp` in 0.2 steps; if it hunts or oscillates, lower `kp` first. If yaw gets worse immediately, flip `assist_sign` before increasing authority.
 
 ## Tests
 
