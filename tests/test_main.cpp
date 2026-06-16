@@ -341,6 +341,37 @@ void test_yaw_damper_collective_feedforward_visible_when_stale() {
     expect_true(output.reason == "stale telemetry", "stale telemetry gate is reported");
 }
 
+void test_yaw_damper_collective_transient_uses_fast_fade() {
+    autorudder::AppConfig cfg = test_config();
+    cfg.max_assist = 0.85;
+    cfg.collective_sign = -1.0;
+    cfg.collective_gain = 0.70;
+    cfg.collective_rate_gain = 0.45;
+    cfg.collective_rate_limit = 0.40;
+    cfg.collective_transient_rate_threshold = 0.20;
+    cfg.collective_transient_fade_time = 0.01;
+    cfg.fade_in_time = 1.0;
+    cfg.fade_out_time = 1.0;
+    autorudder::YawDamper damper(cfg);
+
+    autorudder::YawDamperInput input;
+    input.dt = 0.01;
+    input.collective_valid = true;
+    input.telemetry_fresh = true;
+    input.aircraft_is_ah64 = true;
+    input.input_valid = true;
+    input.assist_enabled = true;
+
+    input.collective = 0.0;
+    damper.update(input);
+
+    input.collective = 0.50;
+    const auto output = damper.update(input);
+    expect_true(output.collective_rate > 40.0, "collective step creates transient rate");
+    expect_near(output.collective_feedforward, -0.75, 0.001, "collective step builds rate feedforward");
+    expect_near(output.final_rudder, -0.75, 0.001, "transient feedforward bypasses slow normal fade");
+}
+
 void test_yaw_damper_trim_capture_subtracts_collective_feedforward() {
     autorudder::AppConfig cfg = test_config();
     cfg.max_assist = 0.85;
@@ -631,6 +662,7 @@ int main() {
     test_yaw_damper_captures_manual_trim_on_release();
     test_yaw_damper_collective_feedforward();
     test_yaw_damper_collective_feedforward_visible_when_stale();
+    test_yaw_damper_collective_transient_uses_fast_fade();
     test_yaw_damper_trim_capture_subtracts_collective_feedforward();
     test_heading_hold_damps_heading_rate();
     test_heading_hold_recaptures_heading_after_turn_command();

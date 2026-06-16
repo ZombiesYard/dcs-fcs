@@ -55,6 +55,8 @@ struct AppConfig {
     double collective_gain = 0.70;
     double collective_rate_gain = 0.45;
     double collective_rate_limit = 0.40;
+    double collective_transient_rate_threshold = 0.20;
+    double collective_transient_fade_time = 0.015;
     double fade_in_time = 0.06;
     double fade_out_time = 0.06;
     double filter_time = 0.05;

@@ -84,6 +84,8 @@ void apply_key(AppConfig& cfg, const std::string& key, const std::string& value)
     else if (key == "collective_gain") cfg.collective_gain = parse_double(value, key);
     else if (key == "collective_rate_gain") cfg.collective_rate_gain = parse_double(value, key);
     else if (key == "collective_rate_limit") cfg.collective_rate_limit = parse_double(value, key);
+    else if (key == "collective_transient_rate_threshold") cfg.collective_transient_rate_threshold = parse_double(value, key);
+    else if (key == "collective_transient_fade_time") cfg.collective_transient_fade_time = parse_double(value, key);
     else if (key == "fade_in_time") cfg.fade_in_time = parse_double(value, key);
     else if (key == "fade_out_time") cfg.fade_out_time = parse_double(value, key);
     else if (key == "filter_time") cfg.filter_time = parse_double(value, key);
@@ -151,6 +153,12 @@ void validate(const AppConfig& cfg) {
     if (cfg.collective_rate_gain < 0.0) throw std::runtime_error("collective_rate_gain must be non-negative");
     if (cfg.collective_rate_limit < 0.0 || cfg.collective_rate_limit > 1.0) {
         throw std::runtime_error("collective_rate_limit must be in [0, 1]");
+    }
+    if (cfg.collective_transient_rate_threshold < 0.0) {
+        throw std::runtime_error("collective_transient_rate_threshold must be non-negative");
+    }
+    if (cfg.collective_transient_fade_time < 0.0) {
+        throw std::runtime_error("collective_transient_fade_time must be non-negative");
     }
     if (cfg.calibration_max_assist < 0.0 || cfg.calibration_max_assist > 0.25) {
         throw std::runtime_error("calibration_max_assist must be in [0, 0.25]");
@@ -248,6 +256,8 @@ void write_default_config(const std::filesystem::path& path) {
         << "collective_gain=" << cfg.collective_gain << "\n"
         << "collective_rate_gain=" << cfg.collective_rate_gain << "\n"
         << "collective_rate_limit=" << cfg.collective_rate_limit << "\n"
+        << "collective_transient_rate_threshold=" << cfg.collective_transient_rate_threshold << "\n"
+        << "collective_transient_fade_time=" << cfg.collective_transient_fade_time << "\n"
         << "fade_in_time=" << cfg.fade_in_time << "\n"
         << "fade_out_time=" << cfg.fade_out_time << "\n"
         << "filter_time=" << cfg.filter_time << "\n"

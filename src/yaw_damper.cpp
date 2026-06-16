@@ -275,7 +275,12 @@ YawDamperOutput YawDamper::update(const YawDamperInput& input) {
         assist_offset_ = target_assist;
     } else {
         const bool reducing_magnitude = std::abs(target_assist) < std::abs(assist_offset_);
-        const double fade_time = reducing_magnitude ? config_.fade_out_time : config_.fade_in_time;
+        double fade_time = reducing_magnitude ? config_.fade_out_time : config_.fade_in_time;
+        if (input.collective_valid &&
+            std::abs(collective_rate) >= config_.collective_transient_rate_threshold &&
+            config_.collective_transient_fade_time < fade_time) {
+            fade_time = config_.collective_transient_fade_time;
+        }
         const double max_delta = fade_time <= 0.0 ? config_.max_assist : (config_.max_assist * dt / fade_time);
         assist_offset_ = move_towards(assist_offset_, target_assist, max_delta);
     }
