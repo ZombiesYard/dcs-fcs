@@ -24,7 +24,7 @@ struct AppConfig {
     double assist_sign = -1.0;
     double yaw_response_sign = 1.0;
     double yaw_rate_sign = -1.0;
-    double kp = 1.35;
+    double kp = 1.45;
     double ki = 0.0;
     double integral_limit = 0.0;
     double max_assist = 0.85;

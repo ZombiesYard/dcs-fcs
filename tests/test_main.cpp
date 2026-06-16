@@ -119,7 +119,7 @@ autorudder::AppConfig heading_config() {
     cfg.control_mode = "heading_hold";
     cfg.yaw_response_sign = 1.0;
     cfg.yaw_rate_sign = -1.0;
-    cfg.kp = 1.35;
+    cfg.kp = 1.45;
     cfg.ki = 0.0;
     cfg.integral_limit = 0.0;
     cfg.max_assist = 0.85;
