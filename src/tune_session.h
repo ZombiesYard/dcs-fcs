@@ -53,6 +53,12 @@ struct TuneReport {
     std::vector<std::string> recommendations;
 };
 
+struct TuneUpdate {
+    TuneConfig config;
+    bool changed = false;
+    std::string message;
+};
+
 class TuneSessionAnalyzer {
 public:
     explicit TuneSessionAnalyzer(TuneConfig config);
@@ -80,5 +86,7 @@ private:
     double collective_transient_sq_seconds_ = 0.0;
     double collective_transient_peak_ = 0.0;
 };
+
+TuneUpdate choose_tune_update(const TuneConfig& current, const TuneReport& report);
 
 }  // namespace autorudder

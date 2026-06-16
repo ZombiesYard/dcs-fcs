@@ -216,4 +216,53 @@ TuneReport TuneSessionAnalyzer::report() const {
     return report;
 }
 
+TuneUpdate choose_tune_update(const TuneConfig& current, const TuneReport& report) {
+    TuneUpdate update;
+    update.config = current;
+    update.message = "no parameter change";
+
+    const auto changed_value = [](double from, double to) {
+        return std::abs(from - to) >= 0.005;
+    };
+
+    if (report.recommended_collective_gain &&
+        changed_value(current.collective_gain, *report.recommended_collective_gain)) {
+        update.config.collective_gain = *report.recommended_collective_gain;
+        update.changed = true;
+        update.message =
+            "collective_gain " + fixed2(current.collective_gain) + " -> " +
+            fixed2(update.config.collective_gain);
+        return update;
+    }
+
+    if (report.recommended_collective_rate_gain &&
+        changed_value(current.collective_rate_gain, *report.recommended_collective_rate_gain)) {
+        update.config.collective_rate_gain = *report.recommended_collective_rate_gain;
+        update.changed = true;
+        update.message =
+            "collective_rate_gain " + fixed2(current.collective_rate_gain) + " -> " +
+            fixed2(update.config.collective_rate_gain);
+        return update;
+    }
+
+    if (report.recommended_kp && changed_value(current.kp, *report.recommended_kp)) {
+        update.config.kp = *report.recommended_kp;
+        update.changed = true;
+        update.message = "kp " + fixed2(current.kp) + " -> " + fixed2(update.config.kp);
+        return update;
+    }
+
+    if (report.recommended_heading_hold_max_assist &&
+        changed_value(current.heading_hold_max_assist, *report.recommended_heading_hold_max_assist)) {
+        update.config.heading_hold_max_assist = *report.recommended_heading_hold_max_assist;
+        update.changed = true;
+        update.message =
+            "heading_hold_max_assist " + fixed2(current.heading_hold_max_assist) + " -> " +
+            fixed2(update.config.heading_hold_max_assist);
+        return update;
+    }
+
+    return update;
+}
+
 }  // namespace autorudder

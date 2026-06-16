@@ -50,17 +50,19 @@ struct CliOptions {
     bool calibrate_sign = false;
     bool test_output = false;
     bool tune_session = false;
+    bool auto_tune = false;
     bool help = false;
 };
 
 void print_help() {
     std::cout
         << "AH-64D external yaw FBW / auto rudder\n"
-        << "Usage: ah64d_auto_rudder [--config PATH] [--dry-run] [--list-devices] [--calibrate-sign] [--tune-session]\n\n"
+        << "Usage: ah64d_auto_rudder [--config PATH] [--dry-run] [--list-devices] [--calibrate-sign] [--tune-session] [--auto-tune]\n\n"
         << "  --list-devices    Print DirectInput and vJoy devices, then exit.\n"
         << "  --dry-run         Decode DCS-BIOS and pedals without writing vJoy.\n"
         << "  --calibrate-sign  Run a low-authority sign comparison on vJoy output.\n"
         << "  --tune-session    Fly normally while logging feedforward and yaw-damping tuning advice.\n"
+        << "  --auto-tune       Fly normally while applying conservative tuning changes in memory.\n"
         << "  --test-output     Sweep the configured output vJoy axis for binding diagnostics.\n"
         << "  --config PATH     Use another config.ini path.\n"
         << "  --help            Print this help.\n";
@@ -82,6 +84,8 @@ CliOptions parse_args(const std::vector<std::string>& args) {
             options.test_output = true;
         } else if (arg == "--tune-session") {
             options.tune_session = true;
+        } else if (arg == "--auto-tune") {
+            options.auto_tune = true;
         } else if (arg == "--config") {
             if (i + 1 >= args.size()) {
                 throw std::runtime_error("--config requires a path");
@@ -217,6 +221,23 @@ TuneConfig make_tune_config(const AppConfig& cfg) {
     tune.collective_rate_gain = cfg.collective_rate_gain;
     tune.collective_sign = cfg.collective_sign;
     return tune;
+}
+
+void apply_tune_config(AppConfig& cfg, const TuneConfig& tune) {
+    cfg.kp = tune.kp;
+    cfg.heading_hold_max_assist = tune.heading_hold_max_assist;
+    cfg.collective_gain = tune.collective_gain;
+    cfg.collective_rate_gain = tune.collective_rate_gain;
+    cfg.collective_sign = tune.collective_sign;
+}
+
+std::string tune_config_summary(const AppConfig& cfg) {
+    std::ostringstream out;
+    out << "collective_gain=" << fixed3(cfg.collective_gain)
+        << " collective_rate_gain=" << fixed3(cfg.collective_rate_gain)
+        << " kp=" << fixed3(cfg.kp)
+        << " heading_hold_max_assist=" << fixed3(cfg.heading_hold_max_assist);
+    return out.str();
 }
 
 void add_tune_sample(
@@ -395,20 +416,27 @@ int run_normal(CliOptions options, AppConfig cfg) {
     return 0;
 }
 
-int run_tune_session(AppConfig cfg) {
+int run_tune_session(AppConfig cfg, bool auto_apply) {
     Runtime runtime(std::move(cfg));
     windows::Hotkey hotkey(runtime.cfg.hotkey);
     windows::VJoyDevice output(runtime.cfg.output_vjoy_id, runtime.cfg.axis_name);
 
-    runtime.logger.info("Tune session writes final rudder to vJoy #" + std::to_string(runtime.cfg.output_vjoy_id));
+    AppConfig active_cfg = runtime.cfg;
+    runtime.logger.info(std::string(auto_apply ? "Auto tune" : "Tune session") +
+                        " writes final rudder to vJoy #" + std::to_string(runtime.cfg.output_vjoy_id));
     runtime.logger.info("Goal order: tune collective feedforward first, then yaw-rate P damping.");
     runtime.logger.info("Fly centered-pedal hover/low-speed segments. Move collective up/down several times, then hold steady.");
     runtime.logger.info("Pedal turn commands, stale telemetry, non-AH-64D data, and unstable/VRS-like segments are ignored.");
-    runtime.logger.info("Press " + hotkey.name() + " to toggle assist; Ctrl+C to finish and print final recommendations.");
+    if (auto_apply) {
+        runtime.logger.info("Auto tune applies one conservative in-memory parameter change per 10-second window.");
+        runtime.logger.info("Auto tune does not edit config.ini; Ctrl+C prints the final active values.");
+    }
+    runtime.logger.info("Active tune config: " + tune_config_summary(active_cfg));
+    runtime.logger.info("Press " + hotkey.name() + " to toggle assist; Ctrl+C to finish.");
 
-    YawDamper damper(runtime.cfg);
-    TuneSessionAnalyzer total_analyzer(make_tune_config(runtime.cfg));
-    TuneSessionAnalyzer window_analyzer(make_tune_config(runtime.cfg));
+    YawDamper damper(active_cfg);
+    TuneSessionAnalyzer total_analyzer(make_tune_config(active_cfg));
+    TuneSessionAnalyzer window_analyzer(make_tune_config(active_cfg));
     bool assist_enabled = true;
     auto last = std::chrono::steady_clock::now();
     auto next_log = last;
@@ -465,8 +493,21 @@ int run_tune_session(AppConfig cfg) {
         }
 
         if (now >= next_tune_report) {
-            log_tune_report(runtime.logger, "Tune window", window_analyzer.report());
-            window_analyzer.reset();
+            const TuneReport report = window_analyzer.report();
+            log_tune_report(runtime.logger, auto_apply ? "Auto tune window" : "Tune window", report);
+            if (auto_apply) {
+                const TuneUpdate update = choose_tune_update(make_tune_config(active_cfg), report);
+                if (update.changed) {
+                    apply_tune_config(active_cfg, update.config);
+                    runtime.cfg = active_cfg;
+                    damper.set_config(active_cfg);
+                    runtime.logger.info("Auto tune applied: " + update.message);
+                    runtime.logger.info("Active tune config: " + tune_config_summary(active_cfg));
+                } else {
+                    runtime.logger.info("Auto tune held parameters: " + update.message);
+                }
+            }
+            window_analyzer = TuneSessionAnalyzer(make_tune_config(active_cfg));
             next_tune_report = now + std::chrono::seconds(10);
         }
 
@@ -474,8 +515,9 @@ int run_tune_session(AppConfig cfg) {
     }
 
     output.set_axis(0.0);
-    log_tune_report(runtime.logger, "Tune final", total_analyzer.report());
-    runtime.logger.info("Stopped tune session");
+    log_tune_report(runtime.logger, auto_apply ? "Auto tune final" : "Tune final", total_analyzer.report());
+    runtime.logger.info("Final active tune config: " + tune_config_summary(active_cfg));
+    runtime.logger.info(std::string("Stopped ") + (auto_apply ? "auto tune" : "tune session"));
     return 0;
 }
 
@@ -614,8 +656,8 @@ int run_app(const std::vector<std::string>& args) {
         if (options.calibrate_sign) {
             return run_calibration(std::move(cfg));
         }
-        if (options.tune_session) {
-            return run_tune_session(std::move(cfg));
+        if (options.tune_session || options.auto_tune) {
+            return run_tune_session(std::move(cfg), options.auto_tune);
         }
         return run_normal(options, std::move(cfg));
     } catch (const std::exception& ex) {

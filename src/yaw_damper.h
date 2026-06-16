@@ -44,6 +44,7 @@ public:
     explicit YawDamper(AppConfig config);
 
     YawDamperOutput update(const YawDamperInput& input);
+    void set_config(AppConfig config);
     void reset();
 
 private:

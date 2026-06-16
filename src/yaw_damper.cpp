@@ -46,6 +46,10 @@ double clamp_unit(double value) {
 
 YawDamper::YawDamper(AppConfig config) : config_(std::move(config)) {}
 
+void YawDamper::set_config(AppConfig config) {
+    config_ = std::move(config);
+}
+
 void YawDamper::reset() {
     has_last_physical_ = false;
     last_physical_ = 0.0;

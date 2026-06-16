@@ -541,6 +541,56 @@ void test_tune_session_excludes_unstable_segments() {
     expect_true(!report.recommended_heading_hold_max_assist.has_value(), "unstable saturation does not recommend more authority");
 }
 
+void test_tune_update_prioritizes_collective_gain() {
+    const auto cfg = tune_config();
+    autorudder::TuneReport report;
+    report.recommended_collective_gain = 0.85;
+    report.recommended_collective_rate_gain = 0.30;
+    report.recommended_kp = 1.60;
+
+    const auto update = autorudder::choose_tune_update(cfg, report);
+
+    expect_true(update.changed, "tune update applies a change");
+    expect_near(update.config.collective_gain, 0.85, 0.001, "collective gain is first priority");
+    expect_near(update.config.collective_rate_gain, cfg.collective_rate_gain, 0.001, "lower-priority rate gain is held");
+    expect_near(update.config.kp, cfg.kp, 0.001, "lower-priority kp is held");
+}
+
+void test_tune_update_applies_kp_when_feedforward_has_no_change() {
+    const auto cfg = tune_config();
+    autorudder::TuneReport report;
+    report.recommended_kp = 1.60;
+
+    const auto update = autorudder::choose_tune_update(cfg, report);
+
+    expect_true(update.changed, "tune update applies kp change");
+    expect_near(update.config.kp, 1.60, 0.001, "kp changes when higher-priority stages have no update");
+    expect_near(update.config.collective_gain, cfg.collective_gain, 0.001, "collective gain is held");
+}
+
+void test_yaw_damper_set_config_preserves_heading_reference() {
+    auto cfg = heading_config();
+    cfg.kp = 1.0;
+    autorudder::YawDamper damper(cfg);
+    autorudder::YawDamperInput input;
+    input.dt = 0.10;
+    input.heading = 1.0;
+    input.heading_valid = true;
+    input.telemetry_fresh = true;
+    input.aircraft_is_ah64 = true;
+    input.input_valid = true;
+    input.assist_enabled = true;
+
+    damper.update(input);
+    cfg.kp = 2.0;
+    damper.set_config(cfg);
+    input.heading = 1.10;
+    const auto output = damper.update(input);
+
+    expect_true(output.heading_error < -0.09, "heading reference survives config update");
+    expect_true(output.final_rudder < -0.30, "updated kp is used without resetting damper state");
+}
+
 }  // namespace
 
 int main() {
@@ -562,6 +612,9 @@ int main() {
     test_tune_session_recommends_collective_gain_increase();
     test_tune_session_recommends_kp_increase_for_slow_damping();
     test_tune_session_excludes_unstable_segments();
+    test_tune_update_prioritizes_collective_gain();
+    test_tune_update_applies_kp_when_feedforward_has_no_change();
+    test_yaw_damper_set_config_preserves_heading_reference();
 
     if (failures != 0) {
         std::cerr << failures << " test failure(s)\n";

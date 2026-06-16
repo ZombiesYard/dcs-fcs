@@ -146,6 +146,23 @@ The analyzer first looks for steady collective feedforward error and recommends 
 
 It deliberately excludes stale telemetry, non-AH-64D data, active pedal turns, and unstable/VRS-like segments. The recommendations are logged only; it does not edit `config.ini` automatically.
 
+For live in-memory tuning, use:
+
+```powershell
+.\build\Release\ah64d_auto_rudder.exe --auto-tune
+```
+
+Use this with DCS already running, spawned into a safe hover/low-speed state. Keep pedals centered, use collective to keep the aircraft under control, and let the app tune rudder behavior. Every 10 seconds it applies at most one conservative parameter change, in this priority order:
+
+```text
+1. collective_gain
+2. collective_rate_gain
+3. kp
+4. heading_hold_max_assist
+```
+
+The active values are only changed in memory. On exit, copy the final logged values into `config.ini` if they feel better. The app still controls only the final rudder vJoy axis; it does not take over collective or throttle bindings.
+
 ## Control Modes
 
 The default mode is:
