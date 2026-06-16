@@ -315,6 +315,32 @@ void test_yaw_damper_collective_feedforward() {
     expect_near(output.final_rudder, -0.42, 0.001, "collective feedforward reaches final rudder");
 }
 
+void test_yaw_damper_collective_feedforward_visible_when_stale() {
+    autorudder::AppConfig cfg = test_config();
+    cfg.max_assist = 0.85;
+    cfg.collective_sign = -1.0;
+    cfg.collective_gain = 0.70;
+    cfg.collective_rate_gain = 0.0;
+    cfg.fade_in_time = 0.0;
+    cfg.fade_out_time = 0.0;
+    autorudder::YawDamper damper(cfg);
+
+    autorudder::YawDamperInput input;
+    input.dt = 0.1;
+    input.physical_rudder = 0.10;
+    input.collective = 0.60;
+    input.collective_valid = true;
+    input.telemetry_fresh = false;
+    input.aircraft_is_ah64 = true;
+    input.input_valid = true;
+    input.assist_enabled = true;
+
+    const auto output = damper.update(input);
+    expect_near(output.collective_feedforward, -0.42, 0.001, "collective feedforward remains visible for diagnostics");
+    expect_near(output.final_rudder, 0.10, 0.001, "stale telemetry still prevents feedforward from reaching final rudder");
+    expect_true(output.reason == "stale telemetry", "stale telemetry gate is reported");
+}
+
 void test_yaw_damper_trim_capture_subtracts_collective_feedforward() {
     autorudder::AppConfig cfg = test_config();
     cfg.max_assist = 0.85;
@@ -604,6 +630,7 @@ int main() {
     test_yaw_damper_override_resets_integral();
     test_yaw_damper_captures_manual_trim_on_release();
     test_yaw_damper_collective_feedforward();
+    test_yaw_damper_collective_feedforward_visible_when_stale();
     test_yaw_damper_trim_capture_subtracts_collective_feedforward();
     test_heading_hold_damps_heading_rate();
     test_heading_hold_recaptures_heading_after_turn_command();

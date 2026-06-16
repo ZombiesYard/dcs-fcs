@@ -122,7 +122,7 @@ YawDamperOutput YawDamper::update(const YawDamperInput& input) {
 
     double collective_rate = 0.0;
     double collective_feedforward = 0.0;
-    if (allowed && input.collective_valid) {
+    if (input.collective_valid) {
         collective_rate = has_last_collective_ ? (collective - last_collective_) / dt : 0.0;
         has_last_collective_ = true;
         last_collective_ = collective;
