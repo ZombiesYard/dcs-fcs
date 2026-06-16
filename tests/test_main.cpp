@@ -98,6 +98,7 @@ void test_ref_extraction() {
 
 autorudder::AppConfig test_config() {
     autorudder::AppConfig cfg;
+    cfg.control_mode = "yaw_damper";
     cfg.assist_sign = 1.0;
     cfg.kp = 0.5;
     cfg.ki = 0.0;
@@ -110,6 +111,29 @@ autorudder::AppConfig test_config() {
     cfg.fade_in_time = 0.1;
     cfg.fade_out_time = 0.1;
     cfg.filter_time = 0.0;
+    return cfg;
+}
+
+autorudder::AppConfig heading_config() {
+    autorudder::AppConfig cfg;
+    cfg.control_mode = "heading_hold";
+    cfg.yaw_response_sign = 1.0;
+    cfg.kp = 2.2;
+    cfg.ki = 0.0;
+    cfg.integral_limit = 0.0;
+    cfg.max_assist = 0.85;
+    cfg.yaw_rate_deadband = 0.0;
+    cfg.heading_kp = 2.0;
+    cfg.heading_rate_limit = 0.35;
+    cfg.turn_rate_max = 0.60;
+    cfg.pedal_command_sign = 1.0;
+    cfg.pedal_command_deadzone = 0.06;
+    cfg.pedal_command_exit_deadzone = 0.03;
+    cfg.fade_in_time = 0.0;
+    cfg.fade_out_time = 0.0;
+    cfg.filter_time = 0.0;
+    cfg.collective_gain = 0.0;
+    cfg.collective_rate_gain = 0.0;
     return cfg;
 }
 
@@ -321,6 +345,52 @@ void test_yaw_damper_trim_capture_subtracts_collective_feedforward() {
     expect_near(output.final_rudder, -0.65, 0.001, "feedforward plus trim reproduces manual rudder");
 }
 
+void test_heading_hold_opposes_negative_yaw_rate() {
+    autorudder::YawDamper damper(heading_config());
+    autorudder::YawDamperInput input;
+    input.dt = 0.02;
+    input.physical_rudder = 0.0;
+    input.yaw_rate_z = -0.10;
+    input.heading = 1.0;
+    input.heading_valid = true;
+    input.telemetry_fresh = true;
+    input.aircraft_is_ah64 = true;
+    input.input_valid = true;
+    input.assist_enabled = true;
+
+    const auto output = damper.update(input);
+    expect_true(output.final_rudder > 0.20, "negative yaw rate commands positive rudder in heading mode");
+    expect_near(output.yaw_rate_command, 0.0, 0.001, "centered heading hold commands zero yaw rate when on heading");
+    expect_true(output.reason == "heading hold", "centered heading mode reports heading hold");
+}
+
+void test_heading_hold_recaptures_heading_after_turn_command() {
+    autorudder::YawDamper damper(heading_config());
+    autorudder::YawDamperInput input;
+    input.dt = 0.02;
+    input.heading = 0.0;
+    input.heading_valid = true;
+    input.telemetry_fresh = true;
+    input.aircraft_is_ah64 = true;
+    input.input_valid = true;
+    input.assist_enabled = true;
+
+    damper.update(input);
+
+    input.physical_rudder = 0.5;
+    auto output = damper.update(input);
+    expect_true(output.yaw_rate_command > 0.14, "pedal deflection commands yaw rate");
+    expect_true(output.reason == "turn command", "pedal deflection reports turn command");
+
+    input.heading = 0.4;
+    input.physical_rudder = 0.0;
+    input.yaw_rate_z = 0.0;
+    output = damper.update(input);
+    expect_near(output.heading_ref, 0.4, 0.001, "releasing pedal captures current heading");
+    expect_near(output.heading_error, 0.0, 0.001, "new heading reference has no immediate error");
+    expect_near(output.final_rudder, 0.0, 0.001, "release does not pull back toward old heading");
+}
+
 }  // namespace
 
 int main() {
@@ -335,6 +405,8 @@ int main() {
     test_yaw_damper_captures_manual_trim_on_release();
     test_yaw_damper_collective_feedforward();
     test_yaw_damper_trim_capture_subtracts_collective_feedforward();
+    test_heading_hold_opposes_negative_yaw_rate();
+    test_heading_hold_recaptures_heading_after_turn_command();
 
     if (failures != 0) {
         std::cerr << failures << " test failure(s)\n";

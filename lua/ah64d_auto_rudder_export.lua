@@ -68,6 +68,30 @@ local function find_collective()
     return nil
 end
 
+local function find_heading(self_data)
+    if self_data and type(self_data.Heading) == "number" then
+        return self_data.Heading
+    end
+
+    if LoGetADIPitchBankYaw then
+        local _, _, yaw = LoGetADIPitchBankYaw()
+        if type(yaw) == "number" then
+            return yaw
+        end
+    end
+
+    local fm = LoGetHelicopterFMData and LoGetHelicopterFMData() or nil
+    if fm then
+        local keys = { "yaw", "Yaw", "heading", "Heading" }
+        for _, key in ipairs(keys) do
+            if type(fm[key]) == "number" then
+                return fm[key]
+            end
+        end
+    end
+    return nil
+end
+
 local function export_frame()
     if not ensure_socket() then
         return
@@ -93,14 +117,19 @@ local function export_frame()
     local yaw_z = angular and safe_number(angular.z) or 0
     local slip = LoGetSlipBallPosition and safe_number(LoGetSlipBallPosition()) or 0
     local collective = find_collective()
+    local heading = find_heading(self_data)
     local collective_text = ""
+    local heading_text = ""
     if collective ~= nil then
         if collective < 0 then collective = 0 end
         if collective > 1 then collective = 1 end
         collective_text = string.format("%.8f", collective)
     end
+    if heading ~= nil then
+        heading_text = string.format("%.8f", heading)
+    end
 
-    AutoRudderExport.udp:send(string.format("AR1,%.3f,%s,%.8f,%.8f,%s\n", now, aircraft, yaw_z, slip, collective_text))
+    AutoRudderExport.udp:send(string.format("AR1,%.3f,%s,%.8f,%.8f,%s,%s\n", now, aircraft, yaw_z, slip, collective_text, heading_text))
 end
 
 local previous_after_next_frame = LuaExportAfterNextFrame

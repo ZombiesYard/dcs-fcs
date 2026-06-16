@@ -53,7 +53,7 @@ struct CliOptions {
 
 void print_help() {
     std::cout
-        << "AH-64D yaw-rate auto rudder\n"
+        << "AH-64D external yaw FBW / auto rudder\n"
         << "Usage: ah64d_auto_rudder [--config PATH] [--dry-run] [--list-devices] [--calibrate-sign]\n\n"
         << "  --list-devices    Print DirectInput and vJoy devices, then exit.\n"
         << "  --dry-run         Decode DCS-BIOS and pedals without writing vJoy.\n"
@@ -114,6 +114,7 @@ struct Telemetry {
     double yaw_rate_z = 0.0;
     std::optional<double> slip_ball;
     std::optional<double> collective;
+    std::optional<double> heading;
 };
 
 struct TelemetrySample {
@@ -230,6 +231,7 @@ TelemetrySample sample_telemetry(Runtime& runtime) {
             sample.telemetry.yaw_rate_z = latest->yaw_rate_z;
             sample.telemetry.slip_ball = latest->slip_ball;
             sample.telemetry.collective = latest->collective;
+            sample.telemetry.heading = latest->heading;
         }
         sample.fresh = runtime.fast_export->has_recent_frame(runtime.cfg.stale_timeout);
         return sample;
@@ -284,7 +286,9 @@ int run_normal(CliOptions options, AppConfig cfg) {
         damper_input.dt = dt;
         damper_input.physical_rudder = pedal.value_or(0.0);
         damper_input.yaw_rate_z = telemetry.yaw_rate_z;
+        damper_input.heading = telemetry.heading.value_or(0.0);
         damper_input.collective = collective.value_or(0.0);
+        damper_input.heading_valid = telemetry.heading.has_value();
         damper_input.collective_valid = collective.has_value();
         damper_input.telemetry_fresh = sample.fresh;
         damper_input.aircraft_is_ah64 = telemetry.aircraft_is_ah64;
@@ -302,6 +306,10 @@ int run_normal(CliOptions options, AppConfig cfg) {
                  << " fresh=" << (sample.fresh ? "yes" : "no")
                  << " pedal=" << fixed3(pedal.value_or(0.0))
                  << " yawZ=" << fixed3(telemetry.yaw_rate_z)
+                 << " rCmd=" << fixed3(result.yaw_rate_command)
+                 << " hdg=" << (telemetry.heading ? fixed3(*telemetry.heading) : "NA")
+                 << " href=" << fixed3(result.heading_ref)
+                 << " hErr=" << fixed3(result.heading_error)
                  << " coll=" << (collective ? fixed3(*collective) : "NA")
                  << " cdot=" << fixed3(result.collective_rate)
                  << " cff=" << fixed3(result.collective_feedforward)
@@ -331,6 +339,7 @@ int run_normal(CliOptions options, AppConfig cfg) {
 double run_calibration_phase(Runtime& runtime, windows::VJoyDevice& output, double sign, double seconds) {
     AppConfig cfg = runtime.cfg;
     cfg.assist_sign = sign;
+    cfg.yaw_response_sign = sign;
     cfg.max_assist = cfg.calibration_max_assist;
     cfg.fade_in_time = 0.30;
     cfg.fade_out_time = 0.10;
@@ -360,7 +369,9 @@ double run_calibration_phase(Runtime& runtime, windows::VJoyDevice& output, doub
         damper_input.dt = dt;
         damper_input.physical_rudder = pedal.value_or(0.0);
         damper_input.yaw_rate_z = telemetry.yaw_rate_z;
+        damper_input.heading = telemetry.heading.value_or(0.0);
         damper_input.collective = collective.value_or(0.0);
+        damper_input.heading_valid = telemetry.heading.has_value();
         damper_input.collective_valid = collective.has_value();
         damper_input.telemetry_fresh = sample.fresh;
         damper_input.aircraft_is_ah64 = telemetry.aircraft_is_ah64;
@@ -399,6 +410,7 @@ int run_calibration(AppConfig cfg) {
     if (std::isfinite(score_positive) && std::isfinite(score_negative)) {
         const double recommended = score_positive <= score_negative ? 1.0 : -1.0;
         runtime.logger.info("Recommended config: assist_sign=" + fixed3(recommended));
+        runtime.logger.info("Recommended config: yaw_response_sign=" + fixed3(recommended));
     } else {
         runtime.logger.warn("Calibration did not collect enough AH-64D fresh telemetry samples");
     }

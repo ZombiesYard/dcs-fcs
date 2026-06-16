@@ -22,6 +22,22 @@ double with_deadband(double value, double deadband) {
     return std::abs(value) < deadband ? 0.0 : value;
 }
 
+double wrap_pi(double angle) {
+    constexpr double pi = 3.14159265358979323846;
+    while (angle > pi) {
+        angle -= 2.0 * pi;
+    }
+    while (angle < -pi) {
+        angle += 2.0 * pi;
+    }
+    return angle;
+}
+
+double signed_curve(double value) {
+    const double magnitude = std::abs(value);
+    return std::copysign(magnitude * magnitude, value);
+}
+
 }  // namespace
 
 double clamp_unit(double value) {
@@ -43,6 +59,9 @@ void YawDamper::reset() {
     has_last_collective_ = false;
     last_collective_ = 0.0;
     assist_offset_ = 0.0;
+    has_heading_ref_ = false;
+    heading_ref_ = 0.0;
+    pedal_command_active_ = false;
 }
 
 YawDamperOutput YawDamper::update(const YawDamperInput& input) {
@@ -70,6 +89,8 @@ YawDamperOutput YawDamper::update(const YawDamperInput& input) {
         input.aircraft_is_ah64 &&
         input.input_valid &&
         input.assist_enabled;
+    const bool heading_mode =
+        config_.control_mode == "heading_hold" || config_.control_mode == "heading_command";
 
     double collective_rate = 0.0;
     double collective_feedforward = 0.0;
@@ -91,6 +112,8 @@ YawDamperOutput YawDamper::update(const YawDamperInput& input) {
 
     double target_assist = 0.0;
     double integral_assist = 0.0;
+    double yaw_rate_command = 0.0;
+    double heading_error = 0.0;
     std::string reason = "assist";
     if (!allowed) {
         if (!input.telemetry_fresh) reason = "stale telemetry";
@@ -98,7 +121,9 @@ YawDamperOutput YawDamper::update(const YawDamperInput& input) {
         else if (!input.input_valid) reason = "input invalid";
         else reason = "disabled";
         integrated_yaw_rate_ = 0.0;
-    } else if (user_override) {
+        has_heading_ref_ = false;
+        pedal_command_active_ = false;
+    } else if (!heading_mode && user_override) {
         reason = "pedal override";
         integrated_yaw_rate_ = 0.0;
         if (config_.trim_capture_enabled > 0.5 &&
@@ -112,6 +137,64 @@ YawDamperOutput YawDamper::update(const YawDamperInput& input) {
                 has_trim_candidate_ = true;
             }
         }
+    } else if (heading_mode) {
+        const double rate = with_deadband(filtered_yaw_rate_, config_.yaw_rate_deadband);
+        bool turn_command = false;
+        if (pedal_command_active_) {
+            turn_command = std::abs(physical) >= config_.pedal_command_exit_deadzone;
+        } else {
+            turn_command = std::abs(physical) >= config_.pedal_command_deadzone;
+        }
+
+        if (turn_command) {
+            const double command_axis = signed_curve(physical);
+            yaw_rate_command = clamp(
+                config_.pedal_command_sign * config_.turn_rate_max * command_axis,
+                -config_.turn_rate_max,
+                config_.turn_rate_max);
+            if (input.heading_valid) {
+                heading_ref_ = input.heading;
+                has_heading_ref_ = true;
+            }
+            integrated_yaw_rate_ = 0.0;
+            reason = "turn command";
+        } else if (input.heading_valid) {
+            if (!has_heading_ref_) {
+                heading_ref_ = input.heading;
+                has_heading_ref_ = true;
+            }
+
+            if (pedal_command_active_) {
+                heading_ref_ = input.heading;
+                integrated_yaw_rate_ = 0.0;
+            }
+            heading_error = wrap_pi(heading_ref_ - input.heading);
+            yaw_rate_command = clamp(
+                config_.heading_kp * heading_error,
+                -config_.heading_rate_limit,
+                config_.heading_rate_limit);
+            reason = "heading hold";
+        } else {
+            has_heading_ref_ = false;
+            integrated_yaw_rate_ = 0.0;
+            reason = "rate hold no heading";
+        }
+        pedal_command_active_ = turn_command;
+
+        const double rate_error = yaw_rate_command - rate;
+        if (!turn_command && config_.ki > 0.0 && config_.integral_limit > 0.0) {
+            integrated_yaw_rate_ += rate_error * dt;
+            const double state_limit = config_.integral_limit / config_.ki;
+            integrated_yaw_rate_ = clamp(integrated_yaw_rate_, -state_limit, state_limit);
+            integral_assist = config_.ki * integrated_yaw_rate_;
+        } else if (turn_command || config_.ki <= 0.0 || config_.integral_limit <= 0.0) {
+            integrated_yaw_rate_ = 0.0;
+        }
+
+        target_assist = clamp(
+            collective_feedforward + config_.yaw_response_sign * (config_.kp * rate_error + integral_assist),
+            -config_.max_assist,
+            config_.max_assist);
     } else {
         if (last_user_override_ && has_trim_candidate_) {
             trim_bias_ = trim_candidate_;
@@ -140,7 +223,7 @@ YawDamperOutput YawDamper::update(const YawDamperInput& input) {
     assist_offset_ = move_towards(assist_offset_, target_assist, max_delta);
 
     YawDamperOutput output;
-    output.final_rudder = clamp_unit(physical + assist_offset_);
+    output.final_rudder = heading_mode && allowed ? clamp_unit(assist_offset_) : clamp_unit(physical + assist_offset_);
     output.assist_offset = assist_offset_;
     output.integral_assist = integral_assist;
     output.trim_bias = trim_bias_;
@@ -148,8 +231,12 @@ YawDamperOutput YawDamper::update(const YawDamperInput& input) {
     output.collective = collective;
     output.collective_rate = collective_rate;
     output.filtered_yaw_rate = filtered_yaw_rate_;
-    output.user_override = user_override;
-    output.assist_active = allowed && !user_override && std::abs(assist_offset_) > 0.0001;
+    output.yaw_rate_command = yaw_rate_command;
+    output.heading = input.heading;
+    output.heading_ref = heading_ref_;
+    output.heading_error = heading_error;
+    output.user_override = !heading_mode && user_override;
+    output.assist_active = allowed && (heading_mode || !user_override) && std::abs(assist_offset_) > 0.0001;
     output.reason = std::move(reason);
     return output;
 }

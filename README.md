@@ -1,6 +1,6 @@
 # AH-64D Auto Rudder
 
-Windows C++ yaw-rate damper for the DCS AH-64D. It listens to DCS-BIOS telemetry and writes one final mixed rudder axis to a separate vJoy device.
+Windows C++ external yaw FBW / auto-rudder for the DCS AH-64D. It listens to DCS telemetry and writes one final rudder axis to a separate vJoy device.
 
 ## Input Chain
 
@@ -97,6 +97,7 @@ With DCS in the AH-64D, confirm the log shows:
 - `fresh=yes`
 - pedal values changing when you move the pedals
 - `yawZ` changing when the helicopter yaws
+- `hdg` showing a number, not `NA`, for heading-hold mode
 
 Before flying, verify the output vJoy binding:
 
@@ -124,17 +125,46 @@ The default direction may need flipping. Use low-authority sign calibration only
 
 Keep pedals centered. The app tests `assist_sign=+1` and `assist_sign=-1`, then logs the lower mean absolute yaw-rate recommendation. Put that value into `config.ini`.
 
+## Control Modes
+
+The default mode is:
+
+```ini
+control_mode=heading_hold
+```
+
+In this mode the pedal axis is treated as yaw intent, not as direct anti-torque pedal position:
+
+```text
+pedal centered -> hold current heading
+pedal deflected -> command yaw rate
+pedal released -> capture current heading as the new reference
+```
+
+The old mixed-axis behavior is still available with:
+
+```ini
+control_mode=yaw_damper
+```
+
+That mode uses `final = physical_pedal + assist_offset` and fades assist out during pedal override.
+
 ## Main Tuning Fields
 
-- `assist_sign`: flip between `1` and `-1` if correction makes yaw worse. The default is `-1` for the observed T300/UCR/vJoy direction where left pedal is negative.
-- `kp`: yaw-rate correction strength.
-- `ki`: centered-pedal heading hold strength, built from accumulated yaw rate.
+- `yaw_response_sign`: flip between `1` and `-1` if heading-hold correction makes yaw worse. If the log shows `yawZ` and `final` keep the same sign while yaw grows, flip this first.
+- `assist_sign`: old `yaw_damper` mode correction sign.
+- `kp`: yaw-rate inner-loop correction strength.
+- `heading_kp`: how strongly heading error commands yaw rate in `heading_hold`.
+- `heading_rate_limit`: maximum automatic yaw-rate command while holding heading.
+- `turn_rate_max`: maximum yaw-rate command from pedal intent.
+- `pedal_command_*`: deadzone, hysteresis, and sign for treating pedals as turn commands.
+- `ki`: optional centered heading-hold integrator. Defaults to `0`; do not enable it until the proportional heading hold is stable.
 - `integral_limit`: maximum steady hold contribution from `ki`.
 - `max_assist`: maximum automatic rudder offset.
 - `yaw_rate_deadband`: yaw rate ignored near zero.
-- `pedal_override_threshold`: pedal deflection where user input overrides assist.
+- `pedal_override_threshold`: pedal deflection where user input overrides assist in old `yaw_damper` mode.
 - `pedal_rate_override_threshold`: pedal movement speed where assist fades out.
-- `trim_capture_*`: when you manually hold a stable pedal position that nearly stops yaw, the app captures that value as the centered-pedal trim baseline after you release.
+- `trim_capture_*`: old `yaw_damper` mode manual trim capture. Defaults off because it can store a bad bias and cause runaway in FBW use.
 - `collective_*`: collective feedforward. This is the part that reacts before yaw rate appears. Default `collective_source=fast_export`; if the log shows `coll=NA`, configure `collective_source=directinput` plus your physical collective device and axis.
 - `fade_in_time` / `fade_out_time`: smoothing for automatic assist.
 - `filter_time`: yaw-rate low-pass filter time.

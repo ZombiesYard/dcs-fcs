@@ -53,6 +53,9 @@ std::optional<FastExportTelemetry> parse_line(const std::string& line) {
         if (fields.size() >= 6 && !fields[5].empty()) {
             telemetry.collective = std::stod(fields[5]);
         }
+        if (fields.size() >= 7 && !fields[6].empty()) {
+            telemetry.heading = std::stod(fields[6]);
+        }
     } catch (const std::exception&) {
         return std::nullopt;
     }

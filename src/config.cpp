@@ -49,12 +49,20 @@ void apply_key(AppConfig& cfg, const std::string& key, const std::string& value)
     else if (key == "output_vjoy_id") cfg.output_vjoy_id = parse_int(value, key);
     else if (key == "input_device_name_contains") cfg.input_device_name_contains = value;
     else if (key == "axis_name") cfg.axis_name = value;
+    else if (key == "control_mode") cfg.control_mode = value;
     else if (key == "assist_sign") cfg.assist_sign = parse_double(value, key);
+    else if (key == "yaw_response_sign") cfg.yaw_response_sign = parse_double(value, key);
     else if (key == "kp") cfg.kp = parse_double(value, key);
     else if (key == "ki") cfg.ki = parse_double(value, key);
     else if (key == "integral_limit") cfg.integral_limit = parse_double(value, key);
     else if (key == "max_assist") cfg.max_assist = parse_double(value, key);
     else if (key == "yaw_rate_deadband") cfg.yaw_rate_deadband = parse_double(value, key);
+    else if (key == "heading_kp") cfg.heading_kp = parse_double(value, key);
+    else if (key == "heading_rate_limit") cfg.heading_rate_limit = parse_double(value, key);
+    else if (key == "turn_rate_max") cfg.turn_rate_max = parse_double(value, key);
+    else if (key == "pedal_command_sign") cfg.pedal_command_sign = parse_double(value, key);
+    else if (key == "pedal_command_deadzone") cfg.pedal_command_deadzone = parse_double(value, key);
+    else if (key == "pedal_command_exit_deadzone") cfg.pedal_command_exit_deadzone = parse_double(value, key);
     else if (key == "pedal_override_threshold") cfg.pedal_override_threshold = parse_double(value, key);
     else if (key == "pedal_rate_override_threshold") cfg.pedal_rate_override_threshold = parse_double(value, key);
     else if (key == "trim_capture_enabled") cfg.trim_capture_enabled = parse_double(value, key);
@@ -89,6 +97,9 @@ void validate(const AppConfig& cfg) {
     if (cfg.collective_source != "off" && cfg.collective_source != "fast_export" && cfg.collective_source != "directinput") {
         throw std::runtime_error("collective_source must be off, fast_export, or directinput");
     }
+    if (cfg.control_mode != "yaw_damper" && cfg.control_mode != "heading_hold" && cfg.control_mode != "heading_command") {
+        throw std::runtime_error("control_mode must be yaw_damper, heading_hold, or heading_command");
+    }
     if (cfg.input_vjoy_id <= 0 || cfg.output_vjoy_id <= 0) throw std::runtime_error("vJoy IDs must be positive");
     if (cfg.collective_input_id <= 0) throw std::runtime_error("collective_input_id must be positive");
     if (cfg.loop_hz < 20 || cfg.loop_hz > 500) throw std::runtime_error("loop_hz must be between 20 and 500");
@@ -97,6 +108,15 @@ void validate(const AppConfig& cfg) {
         throw std::runtime_error("integral_limit must be in [0, 1]");
     }
     if (cfg.max_assist < 0.0 || cfg.max_assist > 1.0) throw std::runtime_error("max_assist must be in [0, 1]");
+    if (cfg.heading_kp < 0.0) throw std::runtime_error("heading_kp must be non-negative");
+    if (cfg.heading_rate_limit < 0.0) throw std::runtime_error("heading_rate_limit must be non-negative");
+    if (cfg.turn_rate_max < 0.0) throw std::runtime_error("turn_rate_max must be non-negative");
+    if (cfg.pedal_command_deadzone < 0.0 || cfg.pedal_command_deadzone > 1.0) {
+        throw std::runtime_error("pedal_command_deadzone must be in [0, 1]");
+    }
+    if (cfg.pedal_command_exit_deadzone < 0.0 || cfg.pedal_command_exit_deadzone > cfg.pedal_command_deadzone) {
+        throw std::runtime_error("pedal_command_exit_deadzone must be in [0, pedal_command_deadzone]");
+    }
     if (cfg.trim_capture_enabled < 0.0 || cfg.trim_capture_enabled > 1.0) {
         throw std::runtime_error("trim_capture_enabled must be in [0, 1]");
     }
@@ -162,7 +182,7 @@ void write_default_config(const std::filesystem::path& path) {
     }
 
     const AppConfig cfg;
-    out << "# AH-64D yaw-rate auto rudder\n"
+    out << "# AH-64D external yaw FBW / auto rudder\n"
         << "dcs_bios_path=" << cfg.dcs_bios_path.string() << "\n"
         << "multicast_address=" << cfg.multicast_address << "\n"
         << "multicast_interface=" << cfg.multicast_interface << "\n"
@@ -174,12 +194,20 @@ void write_default_config(const std::filesystem::path& path) {
         << "output_vjoy_id=" << cfg.output_vjoy_id << "\n"
         << "input_device_name_contains=" << cfg.input_device_name_contains << "\n"
         << "axis_name=" << cfg.axis_name << "\n\n"
+        << "control_mode=" << cfg.control_mode << "\n"
         << "assist_sign=" << cfg.assist_sign << "\n"
+        << "yaw_response_sign=" << cfg.yaw_response_sign << "\n"
         << "kp=" << cfg.kp << "\n"
         << "ki=" << cfg.ki << "\n"
         << "integral_limit=" << cfg.integral_limit << "\n"
         << "max_assist=" << cfg.max_assist << "\n"
         << "yaw_rate_deadband=" << cfg.yaw_rate_deadband << "\n"
+        << "heading_kp=" << cfg.heading_kp << "\n"
+        << "heading_rate_limit=" << cfg.heading_rate_limit << "\n"
+        << "turn_rate_max=" << cfg.turn_rate_max << "\n"
+        << "pedal_command_sign=" << cfg.pedal_command_sign << "\n"
+        << "pedal_command_deadzone=" << cfg.pedal_command_deadzone << "\n"
+        << "pedal_command_exit_deadzone=" << cfg.pedal_command_exit_deadzone << "\n"
         << "pedal_override_threshold=" << cfg.pedal_override_threshold << "\n"
         << "pedal_rate_override_threshold=" << cfg.pedal_rate_override_threshold << "\n"
         << "trim_capture_enabled=" << cfg.trim_capture_enabled << "\n"
