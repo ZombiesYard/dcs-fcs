@@ -1,6 +1,7 @@
 .git-local/
 build/
 build-win/
+dist/
 *.log
 *.user
 *.suo
