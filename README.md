@@ -330,3 +330,8 @@ ctest --test-dir build
 ```
 
 The tests cover DCS-BIOS frame parsing, JSON output reference extraction, AH-64D yaw-damper behavior, and F-14 state-machine roll/rudder assist behavior.
+
+## License
+
+Project source code is licensed under the MIT License. Bundled tracker music
+assets are not relicensed by the project license; see `THIRD_PARTY_NOTICES.md`.
