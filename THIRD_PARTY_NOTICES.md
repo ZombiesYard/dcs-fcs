@@ -1,21 +1,18 @@
 # Third-Party Notices
 
-This project source code is licensed under the MIT License. The files listed
-below are bundled assets and are not relicensed by the project MIT license.
+This project source code is licensed under the MIT License. The repository and
+release packages do not include tracker music files.
 
-## Tracker Music
+## Optional Tracker Music
 
-- `src/[krut]- fotboll !!!.xm`
-  - XM tracker module used by the retro launcher music player.
-  - Module title parsed from the file: `[KRUT]- Fotboll !!!`.
-  - Copyright and redistribution rights remain with the original author or
-    rights holder.
+The retro launcher can play an external FastTracker II XM module if the user
+places it next to the executable as `retro_music.xm`, or under
+`assets/retro/retro_music.xm`.
 
-- `src/N163_Jayster_-_TMNT_Tournament_Fighters_Scrapyard_Swing.ftm`
-  - FamiTracker project file kept as source material.
-  - Copyright and redistribution rights remain with the original author or
-    rights holder.
+Suggested module:
 
-Redistributors should verify they have permission to distribute these music
-assets, especially when publishing binary releases that embed the active XM
-module as a Windows resource.
+- `[krut]- fotboll !!!.xm`
+- Source: https://ftp.modland.com/pub/modules/Fasttracker%202/Dubmood/[krut]-%20fotboll%20!!!.xm
+
+Copyright and redistribution rights remain with the original author or rights
+holder. The project MIT license does not cover downloaded music files.

@@ -16,11 +16,11 @@
 #include "windows/directinput_axis.h"
 #include "windows/fast_export_udp_client.h"
 #include "windows/hotkey.h"
-#include "windows/resource.h"
 #include "windows/vjoy_device.h"
 #include "windows/xinput_axis.h"
 #include "yaw_damper.h"
 
+#include <array>
 #include <atomic>
 #include <algorithm>
 #include <chrono>
@@ -31,6 +31,7 @@
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <mutex>
 #include <optional>
@@ -237,35 +238,44 @@ std::filesystem::path resolve_config_path(const CliOptions& options) {
     return options.config_path;
 }
 
-std::optional<std::pair<const void*, DWORD>> resource_bytes(int resource_id) {
-    HRSRC resource = FindResourceW(nullptr, MAKEINTRESOURCEW(resource_id), MAKEINTRESOURCEW(10));
-    if (!resource) {
+std::optional<std::vector<std::uint8_t>> read_binary_file(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
         return std::nullopt;
     }
-    HGLOBAL loaded = LoadResource(nullptr, resource);
-    if (!loaded) {
-        return std::nullopt;
+    return std::vector<std::uint8_t>(
+        std::istreambuf_iterator<char>(input),
+        std::istreambuf_iterator<char>());
+}
+
+std::optional<std::vector<std::uint8_t>> load_retro_music_xm() {
+    const std::filesystem::path exe = executable_path();
+    const std::filesystem::path exe_dir = exe.empty() ? std::filesystem::current_path() : exe.parent_path();
+    const std::array<std::filesystem::path, 4> candidates{
+        exe_dir / "retro_music.xm",
+        exe_dir / "assets" / "retro" / "retro_music.xm",
+        std::filesystem::current_path() / "retro_music.xm",
+        std::filesystem::current_path() / "assets" / "retro" / "retro_music.xm",
+    };
+    for (const auto& candidate : candidates) {
+        if (auto bytes = read_binary_file(candidate)) {
+            return bytes;
+        }
     }
-    const DWORD size = SizeofResource(nullptr, resource);
-    const void* data = LockResource(loaded);
-    if (!data || size == 0) {
-        return std::nullopt;
-    }
-    return std::make_pair(data, size);
+    return std::nullopt;
 }
 
 bool start_embedded_music() {
-    const auto music = resource_bytes(IDR_RETRO_MUSIC);
-    if (!music) {
-        return false;
-    }
     static std::vector<std::uint8_t> rendered_music;
     static bool attempted_render = false;
     if (!attempted_render) {
         attempted_render = true;
         try {
-            const auto* bytes = static_cast<const std::uint8_t*>(music->first);
-            rendered_music = render_xm_to_wav(std::span<const std::uint8_t>(bytes, music->second), 22050, 300);
+            const auto music = load_retro_music_xm();
+            if (!music) {
+                return false;
+            }
+            rendered_music = render_xm_to_wav(std::span<const std::uint8_t>(*music), 22050, 300);
         } catch (const std::exception&) {
             rendered_music.clear();
         }

@@ -21,6 +21,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -39,33 +40,6 @@ void expect_near(double actual, double expected, double epsilon, const std::stri
         ++failures;
         std::cerr << "FAIL: " << message << " actual=" << actual << " expected=" << expected << '\n';
     }
-}
-
-std::filesystem::path find_test_file(const std::filesystem::path& relative_path) {
-    for (const auto& base : {
-             std::filesystem::current_path(),
-             std::filesystem::current_path().parent_path(),
-             std::filesystem::current_path().parent_path().parent_path(),
-         }) {
-        const auto path = base / relative_path;
-        if (std::filesystem::exists(path)) {
-            return path;
-        }
-    }
-    throw std::runtime_error("test file not found: " + relative_path.string());
-}
-
-std::vector<std::uint8_t> read_binary_file(const std::filesystem::path& path) {
-    std::ifstream input(path, std::ios::binary);
-    if (!input) {
-        throw std::runtime_error("failed to open " + path.string());
-    }
-    input.seekg(0, std::ios::end);
-    const auto size = input.tellg();
-    input.seekg(0, std::ios::beg);
-    std::vector<std::uint8_t> bytes(static_cast<std::size_t>(size));
-    input.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-    return bytes;
 }
 
 void test_protocol_parser_applies_writes() {
@@ -1771,24 +1745,64 @@ void test_retro_sfx_click_toggles_and_blocks_restart() {
     expect_true(action == autorudder::RetroSfxAction::None, "SFX OFF click stays off while a profile is active");
 }
 
+std::vector<std::uint8_t> make_minimal_xm_module() {
+    std::vector<std::uint8_t> data(60 + 276, 0);
+    const auto put_text = [&](std::size_t offset, std::string_view text, std::size_t width) {
+        for (std::size_t i = 0; i < text.size() && i < width; ++i) {
+            data[offset + i] = static_cast<std::uint8_t>(text[i]);
+        }
+    };
+    const auto put_u16 = [&](std::size_t offset, std::uint16_t value) {
+        data[offset] = static_cast<std::uint8_t>(value & 0xFF);
+        data[offset + 1] = static_cast<std::uint8_t>((value >> 8) & 0xFF);
+    };
+    const auto put_u32 = [&](std::size_t offset, std::uint32_t value) {
+        data[offset] = static_cast<std::uint8_t>(value & 0xFF);
+        data[offset + 1] = static_cast<std::uint8_t>((value >> 8) & 0xFF);
+        data[offset + 2] = static_cast<std::uint8_t>((value >> 16) & 0xFF);
+        data[offset + 3] = static_cast<std::uint8_t>((value >> 24) & 0xFF);
+    };
+
+    put_text(0, "Extended Module: ", 17);
+    put_text(17, "minimal test xm", 20);
+    data[37] = 0x1A;
+    put_text(38, "autorudder tests", 20);
+    put_u16(58, 0x0104);
+    put_u32(60, 276);
+    put_u16(64, 1);
+    put_u16(66, 0);
+    put_u16(68, 1);
+    put_u16(70, 1);
+    put_u16(72, 0);
+    put_u16(74, 1);
+    put_u16(76, 6);
+    put_u16(78, 125);
+
+    const std::size_t pattern = data.size();
+    data.resize(pattern + 9, 0);
+    put_u32(pattern, 9);
+    data[pattern + 4] = 0;
+    put_u16(pattern + 5, 1);
+    put_u16(pattern + 7, 0);
+    return data;
+}
+
 void test_retro_xm_parser_loads_user_module() {
-    const auto path = find_test_file("src/[krut]- fotboll !!!.xm");
-    const auto bytes = read_binary_file(path);
+    const auto bytes = make_minimal_xm_module();
 
     const auto info = autorudder::parse_xm_module_info(bytes);
-    expect_true(info.title == "[KRUT]- Fotboll !!!", "XM parser reads module title");
-    expect_true(info.channels == 4, "XM parser reads channel count");
-    expect_true(info.patterns == 43, "XM parser reads pattern count");
-    expect_true(info.instruments == 31, "XM parser reads instrument count");
-    expect_true(info.default_tempo == 4, "XM parser reads default tempo");
-    expect_true(info.default_bpm == 135, "XM parser reads default BPM");
+    expect_true(info.title == "minimal test xm", "XM parser reads module title");
+    expect_true(info.channels == 1, "XM parser reads channel count");
+    expect_true(info.patterns == 1, "XM parser reads pattern count");
+    expect_true(info.instruments == 0, "XM parser reads instrument count");
+    expect_true(info.default_tempo == 6, "XM parser reads default tempo");
+    expect_true(info.default_bpm == 125, "XM parser reads default BPM");
 }
 
 void test_retro_xm_renderer_outputs_wav_memory() {
-    const auto path = find_test_file("src/[krut]- fotboll !!!.xm");
-    const auto bytes = read_binary_file(path);
+    const auto bytes = make_minimal_xm_module();
 
-    const auto wav = autorudder::render_xm_to_wav(bytes, 8000, 8);
+    const auto wav = autorudder::render_xm_to_wav(bytes, 8000, 1);
     expect_true(wav.size() > 44, "XM renderer produces WAV bytes");
     expect_true(std::string(reinterpret_cast<const char*>(wav.data()), 4) == "RIFF", "XM renderer writes RIFF header");
     expect_true(std::string(reinterpret_cast<const char*>(wav.data() + 8), 4) == "WAVE", "XM renderer writes WAVE header");

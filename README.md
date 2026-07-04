@@ -48,6 +48,30 @@ build\Release\f14_rudder_roll_assist.exe
 
 If `vJoyInterface.dll` is not on `PATH`, copy it from the vJoy install folder next to the executable or add its folder to `PATH`.
 
+## Optional Retro Music
+
+The repository and release packages do not include music files. To enable the
+launcher music, download this FastTracker II module yourself:
+
+```text
+https://ftp.modland.com/pub/modules/Fasttracker%202/Dubmood/[krut]-%20fotboll%20!!!.xm
+```
+
+Save it next to the executable as:
+
+```text
+retro_music.xm
+```
+
+or under:
+
+```text
+assets\retro\retro_music.xm
+```
+
+The module remains third-party content and is not covered by this project's MIT
+license.
+
 ## First Run
 
 List devices first:
@@ -333,5 +357,6 @@ The tests cover DCS-BIOS frame parsing, JSON output reference extraction, AH-64D
 
 ## License
 
-Project source code is licensed under the MIT License. Bundled tracker music
-assets are not relicensed by the project license; see `THIRD_PARTY_NOTICES.md`.
+Project source code is licensed under the MIT License. Optional downloaded
+tracker music is not relicensed by the project license; see
+`THIRD_PARTY_NOTICES.md`.

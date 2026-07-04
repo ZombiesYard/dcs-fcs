@@ -2,6 +2,10 @@
 build/
 build-win/
 dist/
+chat
+*.xm
+*.ftm
+*.wav
 *.log
 *.user
 *.suo
