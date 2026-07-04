@@ -25,7 +25,7 @@ DCS should bind the F-14 roll and rudder axes only to vJoy #2. Do not leave the 
 ## Requirements
 
 - Windows
-- DCS-BIOS installed under `C:\Users\15423\Saved Games\DCS\Scripts\DCS-BIOS` for AH-64D DCS-BIOS telemetry
+- DCS-BIOS installed under `C:\Users\UserName\Saved Games\DCS\Scripts\DCS-BIOS` for AH-64D DCS-BIOS telemetry
 - vJoy installed, with vJoy #1 and vJoy #2 enabled
 - UCR already mapping the T300 pedals to vJoy #1
 - CMake 3.20+ and MSVC Build Tools / Visual Studio 2022
