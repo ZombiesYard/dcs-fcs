@@ -296,17 +296,23 @@ void test_power_feedforward_small_collective_lead_is_not_dropped_by_default() {
     cfg.fuel_flow_max = 0.150;
     cfg.rpm_power_gain = 0.0;
     cfg.collective_lead_gain = 0.35;
+    cfg.collective_lead_invert = 1.0;
 
     autorudder::PowerFeedforwardInput input;
     input.fuel_flow = 0.100;
     input.rpm = 100.0;
-    input.collective = 0.510;
+    input.collective = 0.490;
 
-    const auto output = autorudder::compute_power_feedforward_input(cfg, input);
+    auto output = autorudder::compute_power_feedforward_input(cfg, input);
 
-    expect_true(output.source == "fuel_rpm_collective_lead", "small collective increase applies physical lead by default");
+    expect_true(output.source == "fuel_rpm_collective_lead", "small inverted collective increase applies physical lead by default");
     expect_true(output.value.has_value(), "small collective lead keeps a power value");
     expect_near(*output.value, 0.5035, 0.0001, "small collective increase is preserved in the power proxy");
+
+    input.collective = 0.510;
+    output = autorudder::compute_power_feedforward_input(cfg, input);
+    expect_true(output.source == "fuel_rpm", "small inverted collective decrease does not apply upward-only lead");
+    expect_near(*output.value, 0.5000, 0.0001, "upward-only lead does not reduce the power proxy");
 }
 
 autorudder::AppConfig test_config() {
